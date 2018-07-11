@@ -3,7 +3,7 @@ from psycopg2 import connect
 
 class DatabaseConnector():
 
-    def __init__(self, dbname, user = 'postgres' ,password = 'zbyszek24' , host = 'localhost'):
+    def __init__(self, dbname, user = 'postgres' ,password = 'postgres' , host = 'localhost'):
         self._user = user
         self._password = password
         self._dbname = dbname
