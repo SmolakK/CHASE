@@ -1,4 +1,4 @@
-import osgeo.ogr
+#import osgeo.ogr
 import os
 import re
 import datetime as dtime
@@ -51,14 +51,14 @@ def mobile_load(mobile_path):
     :return: None
     """
     temp_file_path = mobile_path.rstrip('.csv') + '_temp.csv'  # create temporary file
-    temp_file = open(temp_file_path, 'wb')
+    temp_file = open(temp_file_path, 'w')
 
     unique_users = []
     tz = pytz.timezone('Europe/London')
 
     print("BUILDING TEMP FILE")
 
-    with open(mobile_path, 'rb', buffering=(2 << 16) + 4) as ffile:  # read with higher buffer
+    with open(mobile_path, 'r', buffering=(2 << 16) + 4) as ffile:  # read with higher buffer
         for row in ffile:
             row = row.split(',')
             row[1] = datetime.datetime.strptime(row[1], '%Y-%m-%d %H:%M:%S')  # convert string to timestamptz
@@ -76,7 +76,7 @@ def mobile_load(mobile_path):
     print("FINISHED BUILDING TEMP FILE")
 
     temp_file.close()
-    temp_file = open(temp_file_path, 'rb', buffering=(2 << 16) + 4)
+    temp_file = open(temp_file_path, 'r', buffering=(2 << 16) + 4)
 
     print("COPYING TEMP FILE INTO DB")
     cur.copy_expert(
@@ -89,11 +89,17 @@ def mobile_load(mobile_path):
     print("DATA COPIED")
     print("ASSIGING POINTS TO SECTORS")
 
-    cur.execute("""UPDATE mobile SET sector = gid
-    FROM (SELECT sectors.gid as gid,mobile.time as timez, mobile.id as id  
+    cur.execute("""CREATE TABLE temp_mobile AS (
+SELECT sectors.gid as sector,mobile.time as time, mobile.id as id, 
+    mobile.lon as lon, mobile.lat as lat, mobile.app as app
     FROM mobile, sectors 
-    WHERE ST_Within(ST_SetSRID(ST_MakePoint(mobile.lon,mobile.lat),4326),sectors.shape)) T1
-    WHERE T1.timez = mobile.time and T1.id = mobile.id""")
+    WHERE ST_Within(ST_SetSRID(ST_MakePoint(mobile.lon,mobile.lat),4326),sectors.shape))""")
+
+    cur.execute("""DELETE FROM mobile""")
+
+    cur.execute("""INSERT INTO mobile(time,lon,lat,id,sector,app) SELECT time,lon,lat,id,sector,app FROM temp_mobile""")
+
+    cur.execute("""DROP TABLE temp_mobile""")
 
     print("DATA LOADED")
 
@@ -102,7 +108,6 @@ def mobile_clear():
     """Clears mobile table"""
     cur.execute("DELETE FROM mobile")
     cur.execute("DELETE FROM users")
-
 
 def weather_load(weather_path):
     """

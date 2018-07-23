@@ -38,7 +38,7 @@ class WaterDataFeeder(DataFeeder):
         """
         self._cur.execute("""SELECT time_bucket('%s minutes', time) as interval, avg(flow), sector
         FROM water 
-        WHERE flow > 0 and flow < 10000 and time >= %s and time <= %s and sector = %s
+        WHERE time >= %s and time <= %s and sector = %s AND flow > 0 and flow < 500
         GROUP BY interval, sector
         ORDER by interval""",[bucket_size,date_begin,date_end, str(sector)])
 
@@ -113,6 +113,7 @@ class GeoDataFeeder(DataFeeder):
         self._coordinates = []
         self._ids = []
         self._sectors = []
+        self._counts = []
 
     @property
     def coordinates(self):
@@ -130,6 +131,10 @@ class GeoDataFeeder(DataFeeder):
     def sectors(self):
         return self._sectors
 
+    @property
+    def counts(self):
+        return  self._counts
+
     def raw_data(self, sector, date_begin='2017-01-01', date_end='2017-12-31'):
         """
         :param date_begin: date to start from (string YYYY-MM-DD)
@@ -146,3 +151,19 @@ class GeoDataFeeder(DataFeeder):
         self._time = fetched[:,0]
         self._ids = fetched[:,3]
         self._sectors = fetched[:,4]
+
+    def agg_data(self, sector, date_begin='2017-01-01', date_end='2017-12-31'):
+        """
+        :param date_begin: date to start from (string YYYY-MM-DD)
+        :param date_end: date to end with (string YYYY-MM-DD)
+        :param sector: sector identifier
+        """
+        self._cur.execute("""SELECT COUNT(*), date_trunc('hour',time) FROM mobile
+        WHERE time >= %s and time <= %s and sector = %s
+        GROUP by date_trunc('hour',time)
+        ORDER by date_trunc('hour',time)""", [date_begin, date_end, sector])
+
+        fetched = np.array(self._cur.fetchall()).reshape(-1,2)
+
+        self._time = fetched[:,1]
+        self._counts = fetched[:,0]
