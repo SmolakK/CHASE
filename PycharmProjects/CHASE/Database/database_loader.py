@@ -34,9 +34,30 @@ def shape_clear():
     cur.execute("DELETE FROM sectors")
 
 
-def water_load():
-    """Dla Barbary"""
-    pass
+def water_load(read_path):
+    """
+    Loads water consumption data into the database
+    :param write_path:
+    :return:
+    """
+    water_file = open(read_path,'rb')
+    cur.copy_expert(
+        """COPY water(time,flow,sector) FROM STDIN WITH CSV DELIMITER AS ',' 
+        ENCODING 'utf-8' QUOTE AS '"' HEADER""",
+        water_file)
+    water_file.close()
+
+def water_folder_iter(dir):
+    """
+    Itarates through .csv files from given path and loads water data into the database
+    :param dir:
+    :return:
+    """
+    for root, dirs, filenames in os.walk(dir):
+        for f in filenames:
+            read_path=os.path.join(dir,f)
+            print(read_path)
+            water_load(read_path)
 
 
 def water_clear():
