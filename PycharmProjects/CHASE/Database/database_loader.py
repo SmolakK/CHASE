@@ -1,4 +1,4 @@
-import osgeo.ogr
+#import osgeo.ogr
 import os
 import re
 import datetime as dtime
@@ -7,7 +7,7 @@ from database_connector import DatabaseConnector
 import datetime
 
 if __name__ == '__main__':
-    dbcon = DatabaseConnector('chase')
+    dbcon = DatabaseConnector('chase2018')
     cur = dbcon.connect()
 
 
@@ -69,7 +69,7 @@ def mobile_load(mobile_path):
     :param mobile_path: path to mobile phones data
     :return: None
     """
-    temp_file_path = mobile_path.rstrip('.csv') + '_temp.csv'  # create temporary file
+    temp_file_path = mobile_path.rstrip('.csv') + "/" + 'temp.csv'  # create temporary file
     temp_file = open(temp_file_path, 'w')
 
     unique_users = []
@@ -80,15 +80,19 @@ def mobile_load(mobile_path):
     with open(mobile_path, 'r', buffering=(2 << 16) + 4) as ffile:  # read with higher buffer
         for row in ffile:
             row = row.split(',')
-            row[1] = datetime.datetime.strptime(row[1], '%Y-%m-%d %H:%M:%S')  # convert string to timestamptz
+            try:
+                row[3] = datetime.datetime.strptime(row[3].split('.')[0], '%Y-%m-%d %H:%M:%S')  # convert string to timestamptz
+            except:
+                print(row)
+                continue
             #row[1] = dtime.datetime.fromtimestamp(float(row[1]),tz)  # convert UNIX to timestamptz
 
-            if row[0].upper() not in unique_users:  # search for unique ids
-                uq_user = row[0].rstrip('\r\n').upper()
-                unique_users.append(row[0].upper())
+            if row[4].upper() not in unique_users:  # search for unique ids
+                uq_user = row[4].rstrip('\r\n').upper()
+                unique_users.append(row[4].upper())
                 cur.execute("INSERT INTO users(id) VALUES (%s)", [uq_user])  # insert detected users to users table
 
-            row[0] = row[0].replace('\r','').upper()
+            row[4] = row[4].replace('\r','').upper()
             row = ','.join(map(str, row))  # join converted list back
             temp_file.write(row)
 
@@ -99,7 +103,7 @@ def mobile_load(mobile_path):
 
     print("COPYING TEMP FILE INTO DB")
     cur.copy_expert(
-        """COPY mobile(id,time,lat,lon,app) FROM STDIN WITH CSV DELIMITER AS ',' ENCODING 'utf-8' QUOTE AS '"' """,
+        """COPY mobile(app,lat,lon,time,id) FROM STDIN WITH CSV DELIMITER AS ',' ENCODING 'utf-8' QUOTE AS '"' """,
         temp_file)
 
     temp_file.close()
@@ -122,11 +126,13 @@ SELECT sectors.gid as sector,mobile.time as time, mobile.id as id,
 
     print("DATA LOADED")
 
-
 def mobile_clear():
     """Clears mobile table"""
     cur.execute("DELETE FROM mobile")
     cur.execute("DELETE FROM users")
+
+mobile_clear()
+mobile_load("""/home/kamilsmolak/Projekty/CHASE/Data/geodata2018_ts/filtered.csv""")
 
 def weather_load(weather_path):
     """

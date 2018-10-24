@@ -161,7 +161,7 @@ class GeoDataFeeder(DataFeeder):
         self._cur.execute("""SELECT COUNT(*), date_trunc('hour',time) FROM mobile
         WHERE time >= %s and time <= %s and sector = %s
         GROUP by date_trunc('hour',time)
-        ORDER by date_trunc('hour',time)""", [date_begin, date_end, sector])
+        ORDER by date_trunc('hour',time)""", [date_begin, date_end, str(sector)])
 
         fetched = np.array(self._cur.fetchall()).reshape(-1,2)
 
