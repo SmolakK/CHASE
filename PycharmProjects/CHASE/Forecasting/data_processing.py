@@ -14,9 +14,33 @@ def stride_data(data,lag):
     """
     as_strided = np.lib.stride_tricks.as_strided
 
-    x_array = as_strided(data, (len(data) - lag, lag), (8,8))
-    y_array = np.array(data[lag:].values).reshape(-1,1)
+    x_array = as_strided(data, (len(data) - lag, lag), (8, 8))
+    y_array = np.array(data[lag:].values).reshape(-1, 1)
     return x_array,y_array
+
+
+def exog_stride_data(data,lag,exog_data,lagsx):
+    """
+    Uses numpy tool stride_tricks to prepare arrays containing number of lags for internal data and number of lags for
+    external data offset by one step at each row
+    :param data: DataFrame with time-series
+    :param lag: Data lag (number of columns of array)
+    :param exog_data: DataFrame with time-series of external data
+    :param lagsx: Data lag for external data (number of columns of array)
+    :return: Stride for X and Y
+    """
+    as_strided = np.lib.stride_tricks.as_strided
+
+    stride_length = len(data) - lag
+
+    x_array = as_strided(data, (stride_length, lag), (8,8)) #todo: test standardisation
+    y_array = np.array(data[lag:].values).reshape(-1,1)
+
+    exog_x_array = as_strided(exog_data, (len(exog_data) - lagsx + 1, lagsx), (8,8))[lag - lagsx + 1:]
+
+    stacked_x_array = np.hstack((x_array,exog_x_array))
+
+    return stacked_x_array, y_array
 
 
 def leaveweek(data,days):
@@ -49,9 +73,11 @@ def parametrize(water,geo,begin):
     :return: parametrized geo dataset
     """
     decay_size, offset = preprocessing.best_decay_offset(water, geo, 5, begin, False)
-    geo_decayed = preprocessing.decay(geo, decay_size[0])  # put decay
+    #geo_decayed = preprocessing.decay(geo, decay_size[0])  # put decay
+    geo_decayed = preprocessing.decay(geo, 0)  # put decay
     geo_norm = preprocessing.standardise_days(geo_decayed)
     geo_regular = preprocessing.regular_week(geo_norm, offset[0])  # put offset
+    #geo_regular = preprocessing.regular_week(geo_norm, 0)  # put offset
     return geo_regular
 
 

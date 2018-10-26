@@ -38,7 +38,15 @@ import scipy.stats
 global day_cut
 day_cut = 24
 
+
 def continous_predictor(regressor, x_test, y_test):
+    """
+    Step-by-step prediction. At each step a forecasted value is used.
+    :param regressor: Trained regression model
+    :param x_test: Test lags
+    :param y_test: Ground truth for predictions
+    :return:
+    """
     preds = []
     x_test = x_test[0,:].reshape(1,-1)
     for iters in range(len(y_test)):
@@ -48,13 +56,34 @@ def continous_predictor(regressor, x_test, y_test):
     preds = np.array(preds).reshape(-1,1)
     return preds
 
+
+def exog_continous_predictor(regressor, x_test, y_test, lag):
+    """
+    Step-by-step prediction. At each step a forecasted value is used. Appends exogenous data.
+    :param regressor: Trained regression model
+    :param x_test: Test lags
+    :param y_test: Ground truth for predictions
+    :param lag: size of a lag of internal data
+    :return:
+    """
+    preds = []
+    x_test = x_test[0,:].reshape(1,-1)
+    for iters in range(len(y_test)):
+        pred = regressor.predict(x_test).reshape(-1,1)
+        preds.append(pred[0][0])
+        x_appended = np.append(x_test[:,1:lag],pred, axis=1)
+        x_test = np.append(x_appended,x_test[:,lag:], axis=1)
+    preds = np.array(preds).reshape(-1,1)
+    return preds
+
+
 def ML_internal(train_data, lag_size, folds, regressor):
     """
     Predicts time-series using internal data
     :param train_data: Train/test data
     :param lag_size: size of the lag
     :param folds: Number of folds in CV process
-    :param regressor: defined regressor
+    :param regressor: Defined regressor
     :return: mean error, trained model, residuals, predictions and (temporary) identifier
     """
     error = []
@@ -70,7 +99,10 @@ def ML_internal(train_data, lag_size, folds, regressor):
 
         preds = continous_predictor(regressor, x_test, y_test)
 
-        error.append(utils.RMSE(y_test, preds))
+        single_error = utils.RMSE(y_test,preds)
+        error.append(single_error)
+        x = np.mean(test).values[0]
+        print("Relative error: %s:" % (str((single_error/x)*100))+"%")
         preds = np.array(preds).reshape(-1, 1)
         res = y_test - preds
 
@@ -82,10 +114,46 @@ def ML_internal(train_data, lag_size, folds, regressor):
 
 
 def ML_external(train_data, lag_size, folds, regressor, exog_data, lagsx):
-    pass
+    """
+    Predicts time-series using internal and external geolocated data
+    :param train_data: Train/test internal data
+    :param lag_size: size of the lag for internal data
+    :param folds: Number of folds in CV process
+    :param regressor: Defined regressor
+    :param exog_data: Train/Test external data
+    :param lagsx: size of the lag for external data
+    :return: mean error, trained model, resiudals, prediction and (temporary) internal identifier
+    """
+    error = []
+    for k in range(folds):
+        train, test, ident = data_processing.leaveweek(train_data,14) #todo: CV
+        exog_train, exog_test, exog_ident = data_processing.leaveweek(exog_data,14)
+
+        x_train, y_train = data_processing.exog_stride_data(train, lag_size, exog_train, lagsx)
+        y_train = y_train.reshape(-1, 1)
+
+        x_test, y_test = data_processing.exog_stride_data(test, lag_size, exog_test, lagsx)
+        y_test = y_test.reshape(-1, 1)
+
+        regressor.fit(x_train,y_train)
+
+        preds = exog_continous_predictor(regressor, x_test, y_test, lag_size)
+
+        single_error = utils.RMSE(y_test,preds)
+        error.append(single_error)
+        x = np.mean(test).values[0]
+        print("Relative error: %s:" % (str((single_error/x)*100))+"%")
+        preds = np.array(preds).reshape(-1, 1)
+        res = y_test - preds
+
+        stacked = np.hstack((y_test, preds))
+        stacked_df = pd.DataFrame(data=stacked, columns=['org', 'pred'])
+
+    preds = pd.DataFrame(preds, index=test.index[lag_size:])  # todo: find another way for datetime embedding
+    return np.mean(error), regressor, res, preds, ident
 
 
-def ML_predict(train_data, lag_size, folds, method='RF', exog_data = None, lagsx = None): #todo: split to internal and external interface
+def ML_predict(train_data, lag_size, folds, method='RF', exog_data = None, lagsx = None):
     """
     Makse machine learning prediction based only on historical data
     :param train_data: DataFrame with training-test data
@@ -101,10 +169,11 @@ def ML_predict(train_data, lag_size, folds, method='RF', exog_data = None, lagsx
         rfr = SVR(kernel='linear', epsilon=2.831, C=1.661)
     if method == 'ET':
         rfr = ExtraTreesRegressor(n_estimators=680, criterion='mse', oob_score=True, bootstrap=True)
-
+    #todo: importance chcek
     if exog_data is not None and lagsx is not None:
         print("Running exogenous mode")
         error, regressor, res, preds, ident = ML_external(train_data, lag_size, folds, rfr, exog_data, lagsx)
+        return error, regressor, res, preds, ident
     else:
         print("Running internal mode")
         error, regressor, res, preds, ident = ML_internal(train_data, lag_size, folds, rfr)
@@ -126,41 +195,25 @@ def calculate_best(method,sector,train_begin,train_end,validation_begin,validati
     lagsx = 5
 
     if doff:
-        e, model, res, final_preds, ident = ML_predict(train, lags, 1, method = method)
+        e, model, res, preds, ident = ML_predict(train, lags, 1, method = method)
         print("MEAN: %f" % e)
 
         x_validation, y_validation = data_processing.stride_data(validation,lags)
 
-        valid_preds = continous_predictor(model,x_validation, y_validation)
+        valid_preds = continous_predictor(model, x_validation, y_validation)
 
         print("VALIDATION: %f" % utils.RMSE(y_validation, valid_preds)) #todo: Investigate validation step, raises high RMSE
         valid_preds = np.array(valid_preds).reshape(-1, 1)
         #res = y - valid_preds
 
-    xtrain = xtrain.fillna(0)
-
-    e, model, res, final_xpreds, ident2 = ML_predict(train, lags, 1, method=method, xtrain, lagsx)
+    e, model, res, exog_preds, ident2 = ML_predict(train, lags, 1, method, xtrain, lagsx)
     print("MEAN: %f" % e)
-    #x, y = xprepare(validation, xvalidation, lags, lagsx)
 
-    valid_preds = []
-    as_strided = np.lib.stride_tricks.as_strided
-    x = as_strided(validation, (1, lags), (validation.values.strides * 2))
-    y = np.array(validation[lags:].values).reshape(-1, 1)
-    xx = as_strided(xvalidation, (len(xvalidation) - lagsx + 1, lagsx), (xvalidation.values.strides * 2))[
-              lags - lagsx + 1:]
+    x_validation, y_validation = data_processing.exog_stride_data(validation,lags,xvalidation,lagsx)
 
-    for iters in range(len(y)):
-        x_array = np.hstack((x, xx[iters].reshape(1, -1)))
-        pred = model.predict(x_array).reshape(-1, 1)
-        valid_preds.append(float(pred))
-        x = np.append(x[:, 1:], pred, axis=1)
+    exog_valid_preds = exog_continous_predictor(model, x_validation, y_validation,lags)
 
-    #pred = model.predict(x).reshape(-1, 1)
-    print("VALIDATION: %f" % RMSE(y, valid_preds))
-
-    valid_preds = np.array(valid_preds).reshape(-1, 1)
-    #res = y - pred
+    print("VALIDATION: %f:" % utils.RMSE(y_validation,exog_valid_preds))
 
     ident2 += 'g'
-    return final_preds,final_xpreds, ident, ident2
+    return preds, exog_preds, ident, ident2

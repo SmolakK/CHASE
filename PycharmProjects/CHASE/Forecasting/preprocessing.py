@@ -40,7 +40,8 @@ def standardise_days(df):
     normalized_list = []
 
     for g in grouped:
-        normalized = (g[1] - g[1].mean()) / (g[1].std())
+        #normalized = (g[1] - g[1].mean()) / (g[1].std())
+        normalized = g[1]
         normalized_list.append(normalized)
     return pd.concat(normalized_list)
 
@@ -59,7 +60,7 @@ def dict_offset(dict,offset):
     else:
         for key in dict.keys():
             new_regular[key[0] * 24 + key[1].hour + key[1].minute/60.] = dict[key]
-    # todo: add other resoultions (one hour is maximum now)
+    # todo: add other resolutions (one hour is maximum now)
     return new_regular
 
 
@@ -91,7 +92,7 @@ def regular_week(df,offset=0):
     return sorted_regular_week
 
 
-def embed(sorted_regular_dataframe,begin,week_length):
+def embed(sorted_regular_dataframe, begin, week_length):
     """
     Embeds regular weeks into datetime and checks for holidays, which are substituted by sunday
     :param sorted_regular_dataframe: regularized dataframe
@@ -121,7 +122,7 @@ def embed(sorted_regular_dataframe,begin,week_length):
     return regular_embedded
 
 
-def best_decay_offset(waterdf, geo_df, check_size,begin,plot=False):
+def best_decay_offset(waterdf, geo_df, check_size, begin, plot=False):
     """
     Finds the best parameters maximizng the correlation between geo and water time-series
     :param waterdf: water time-series dataframe
